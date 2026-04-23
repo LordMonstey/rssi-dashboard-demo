@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard RSSI · Splunk ES Portfolio Demo | CMAR PACA</title>
+    <meta name="description" content="Portfolio dashboard · reporting RSSI mensuel par Axel Sellami, SOC Analyst. Données fictives.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:#f8fafc;--card:#ffffff;--border:#e2e8f0;
+            --text:#1e293b;--text2:#64748b;--bg3:#f1f5f9;
+            --header:rgba(255,255,255,0.88);--code:#0f172a;
+        }
+        [data-theme="dark"]{
+            --bg:#0f172a;--card:#1e293b;--border:#334155;
+            --text:#f1f5f9;--text2:#94a3b8;--bg3:#0f172a;
+            --header:rgba(15,23,42,0.92);--code:#020617;
+        }
+        *{transition:background-color .3s,border-color .3s,color .2s}
+        body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+        .mono{font-family:'JetBrains Mono',monospace}
+        header{background:var(--header)!important;backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+        .card{background:var(--card);border:1px solid var(--border)}
+
+        [data-theme="light"] body{
+            background:linear-gradient(-45deg,#f8fafc,#edf2f7,#e2e8f0,#f1f5f9);
+            background-size:400% 400%;animation:bgAnim 15s ease infinite;
+        }
+        @keyframes bgAnim{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+        @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .ae{opacity:0;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) forwards}
+        .d1{animation-delay:.1s}.d2{animation-delay:.2s}.d3{animation-delay:.3s}
+        .d4{animation-delay:.4s}.d5{animation-delay:.5s}.d6{animation-delay:.6s}
+
+        @keyframes pg{0%{box-shadow:0 0 0 0 rgba(16,185,129,.7)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+        @keyframes pr{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7)}70%{box-shadow:0 0 0 6px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+        .sdot{height:12px;width:12px;border-radius:50%;display:inline-block}
+        .sg{background:#10b981;animation:pg 2s infinite}.sr{background:#ef4444;animation:pr 2s infinite}
+
+        .cc{position:relative;width:100%;height:300px}
+        @media(min-width:768px){.cc{height:350px}}
+
+        .ic{transition:all .3s cubic-bezier(.25,.8,.25,1);border-left:4px solid transparent}
+        .ic:hover{transform:translateY(-4px);border-left-color:#dc2626;box-shadow:0 15px 30px -5px rgba(0,0,0,.12)}
+        [data-theme="dark"] .ic:hover{box-shadow:0 15px 30px -5px rgba(0,0,0,.4)}
+
+        .demo-ribbon{background:linear-gradient(90deg,#1e3a8a,#1e40af,#1e3a8a);background-size:200% auto;animation:sh 6s linear infinite}
+        @keyframes sh{0%{background-position:0% center}100%{background-position:200% center}}
+
+        /* DARK TOGGLE */
+        .ttrack{width:44px;height:24px;border-radius:12px;background:#cbd5e1;cursor:pointer;position:relative;transition:background .3s}
+        [data-theme="dark"] .ttrack{background:#334155}
+        .tthumb{width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:3px;transition:transform .3s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+        [data-theme="dark"] .tthumb{transform:translateX(20px)}
+
+        /* SIGMA */
+        .sigma{background:var(--code);border-radius:8px;padding:16px;font-size:11px;line-height:1.9;border:1px solid #334155;overflow-x:auto}
+        .sk{color:#93c5fd}.sv{color:#86efac}.sc{color:#64748b;font-style:italic}.ss{color:#fca5a5}.st{color:#fbbf24}
+
+        /* GAUGE */
+        .gw{position:relative;width:120px;height:70px;overflow:hidden;margin:0 auto}
+        .gbg{fill:none;stroke:var(--border);stroke-width:12}
+        .gf{fill:none;stroke-linecap:round;stroke-width:12;transition:stroke-dashoffset .8s ease}
+
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-track{background:var(--bg3)}
+        ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+        [data-theme="dark"] ::-webkit-scrollbar-thumb{background:#475569}
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+<div class="demo-ribbon text-white text-[11px] font-medium text-center py-1.5 no-print">
+    <span class="font-bold tracking-wide">PORTFOLIO DEMO</span>
+    <span class="opacity-80 ml-2">· Dashboard RSSI mensuel powered by Splunk Enterprise Security · Axel Sellami SOC Analyst · Données 100% fictives</span>
+</div>
+
+<header class="sticky top-0 z-50 ae">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 bg-blue-800 rounded flex flex-col items-center justify-center text-white font-bold leading-none border-b-4 border-red-600 shadow-lg hover:scale-105 transition-transform">
+                    <span class="text-[10px] opacity-80">CMA</span><span class="text-sm">PACA</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight" style="color:var(--text)">Chambre de Métiers et de l'Artisanat</h1>
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">SPLUNK ENTERPRISE SECURITY</span>
+                            <span class="text-[10px] font-mono bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded">index=* sourcetype=*</span>
+                            <p class="text-xs font-medium" style="color:var(--text2)">Veille RSSI · Mars 2026</p>
+                        </div>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <p class="text-[11px] font-medium" style="color:var(--text)">Axel Sellami · Analyste SOC</p>
+                            <a href="mailto:axelsellami@gmail.com" class="text-[10px] text-blue-500 hover:underline inline-flex items-center gap-1 no-print"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>Contact</a>
+                            <span class="no-print" style="color:var(--border)">·</span>
+                            <a href="https://github.com/LordMonstey" target="_blank" rel="noopener" class="text-[10px] text-blue-500 hover:underline inline-flex items-center gap-1 no-print"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>GitHub</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 no-print cursor-pointer" onclick="toggleDark()">
+                    <svg class="w-3.5 h-3.5" style="color:var(--text2)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <div class="ttrack"><div class="tthumb"></div></div>
+                    <svg class="w-3.5 h-3.5" style="color:var(--text2)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                </div>
+                <div class="hidden md:flex flex-col items-end">
+                    <span class="text-xs uppercase tracking-wider" style="color:var(--text2)">Santé Sécurité</span>
+                    <div class="flex items-center gap-2"><span class="sdot sg"></span><span class="font-bold" style="color:var(--text)">100/100 (EXCELLENT)</span></div>
+                </div>
+                <button onclick="generatePDF()" class="no-print inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition-all shadow-md active:scale-95">
+                    <svg id="loaderIcon" class="hidden animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    <span id="btnText">Télécharger PDF</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main id="dashboardContent" class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-6">
+
+    <!-- SYNTHESE + CVE -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 ae d1">
+        <div class="lg:col-span-2 card border-l-4 border-blue-600 rounded-r-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+            <h2 class="text-lg font-bold mb-2 flex items-center gap-2" style="color:var(--text)">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Synthèse Exécutive
+            </h2>
+            <p class="text-sm leading-relaxed" style="color:var(--text)">
+                Mars 2026 : exploitation active de CVE sur infrastructures de virtualisation (VMware) et navigateurs (Chrome). <strong>14 notable events</strong> remontés par Splunk ES ce mois (3 critiques, 11 élevés), <strong>100% contenus</strong>. Posture Endpoint excellente (100/100). Anomalie comportementale détectée sur <code class="bg-red-100 text-red-700 px-1 rounded font-mono text-[11px]">user_J</code> par la correlation search <em>Suspicious User Activity Spike</em>. Saturation critique de la base d'audit en annexe.
+            </p>
+        </div>
+        <div class="card rounded-xl border border-red-200 shadow-md overflow-hidden flex flex-col">
+            <div class="bg-gradient-to-r from-red-50 to-white px-4 py-3 border-b border-red-100 flex items-center justify-between">
+                <h3 class="text-[13px] font-bold text-red-900 flex items-center gap-2">
+                    <span class="relative flex h-2.5 w-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"></span></span>
+                    Top 3 Vulnérabilités Actives
+                </h3>
+            </div>
+            <div class="divide-y divide-slate-100 flex-grow flex flex-col justify-center">
+                <div class="group flex flex-col p-3 hover:bg-slate-50 cursor-help transition-colors">
+                    <div class="flex items-center justify-between">
+                        <div><div class="text-[11px] font-bold" style="color:var(--text)">VMware Aria Operations</div><div class="text-[9px] text-slate-500 flex gap-1 mt-0.5"><span class="bg-red-100 text-red-700 px-1 rounded mono">CVE-2026-22719</span>RCE Injection</div></div>
+                        <div class="text-right"><span class="block text-[10px] font-bold text-red-600">CVSS 8.1</span><span class="block text-[9px] text-blue-600">Patch 8.18.6</span></div>
+                    </div>
+                    <div class="max-h-0 opacity-0 overflow-hidden group-hover:max-h-20 group-hover:opacity-100 group-hover:mt-2 transition-all duration-300">
+                        <div class="bg-blue-50 border border-blue-100 rounded p-2 text-[10px] text-blue-800"><b>Action :</b> Appliquer correctif 8.18.6 en urgence. Restreindre accès admin via pare-feu.</div>
+                    </div>
+                </div>
+                <div class="group flex flex-col p-3 hover:bg-slate-50 cursor-help transition-colors">
+                    <div class="flex items-center justify-between">
+                        <div><div class="text-[11px] font-bold" style="color:var(--text)">Qualcomm / Android</div><div class="text-[9px] text-slate-500 flex gap-1 mt-0.5"><span class="bg-red-100 text-red-700 px-1 rounded mono">CVE-2026-21385</span>Memory Corruption</div></div>
+                        <div class="text-right"><span class="block text-[10px] font-bold text-red-600">CVSS 7.8</span><span class="block text-[9px] text-blue-600">MAJ Système</span></div>
+                    </div>
+                    <div class="max-h-0 opacity-0 overflow-hidden group-hover:max-h-20 group-hover:opacity-100 group-hover:mt-2 transition-all duration-300">
+                        <div class="bg-blue-50 border border-blue-100 rounded p-2 text-[10px] text-blue-800"><b>Action :</b> Forcer MAJ MDM. Isoler appareils non conformes du Wi-Fi.</div>
+                    </div>
+                </div>
+                <div class="group flex flex-col p-3 hover:bg-slate-50 cursor-help transition-colors">
+                    <div class="flex items-center justify-between">
+                        <div><div class="text-[11px] font-bold" style="color:var(--text)">Google Chrome</div><div class="text-[9px] text-slate-500 flex gap-1 mt-0.5"><span class="bg-orange-100 text-orange-700 px-1 rounded mono">CVE-2026-2441</span>Use-After-Free</div></div>
+                        <div class="text-right"><span class="block text-[10px] font-bold text-orange-600">ÉLEVÉE</span><span class="block text-[9px] text-blue-600">v145.0+</span></div>
+                    </div>
+                    <div class="max-h-0 opacity-0 overflow-hidden group-hover:max-h-20 group-hover:opacity-100 group-hover:mt-2 transition-all duration-300">
+                        <div class="bg-blue-50 border border-blue-100 rounded p-2 text-[10px] text-blue-800"><b>Action :</b> Déployer 145.0+ via GPO. Forcer redémarrage navigateur.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs ANIMÉS -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 ae d2">
+        <div class="card p-4 rounded-xl shadow-sm ic">
+            <p class="text-xs font-medium uppercase" style="color:var(--text2)">Volume Détections</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-3xl font-bold" id="kpi-det" style="color:var(--text)">0</span>
+                <span class="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">-14%</span>
+            </div>
+            <div class="mt-1 w-full bg-slate-100 rounded-full h-1.5 flex overflow-hidden">
+                <div class="bg-amber-400 h-1.5" style="width:59%"></div>
+                <div class="bg-blue-400 h-1.5" style="width:41%"></div>
+            </div>
+            <p class="text-[10px] mt-1 mono" style="color:var(--text2)">index=soc_alerts · 59% Med · &lt;1% High</p>
+        </div>
+        <div class="card p-4 rounded-xl shadow-sm ic">
+            <p class="text-xs font-medium uppercase" style="color:var(--text2)">Santé Endpoint</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-3xl font-bold text-green-600" id="kpi-hlth">0</span>
+                <span class="text-sm" style="color:var(--text2)">/ 100</span>
+            </div>
+            <div class="mt-1 flex gap-1">
+                <div class="flex-1 h-1.5 bg-green-500 rounded-sm"></div><div class="flex-1 h-1.5 bg-green-500 rounded-sm"></div>
+                <div class="flex-1 h-1.5 bg-green-500 rounded-sm"></div><div class="flex-1 h-1.5 bg-green-500 rounded-sm"></div>
+            </div>
+            <p class="text-[10px] mt-1" style="color:var(--text2)">Forwarders Splunk · 100% UP</p>
+        </div>
+        <div class="card p-4 rounded-xl shadow-sm ic">
+            <p class="text-xs font-medium uppercase" style="color:var(--text2)">Postes Actifs</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-3xl font-bold" id="kpi-act" style="color:var(--text)">0</span>
+                <span class="text-xs text-blue-500">/ 2 250</span>
+            </div>
+            <div class="mt-1 w-full rounded-full h-1.5" style="background:var(--border)">
+                <div class="bg-blue-500 h-1.5 rounded-full" style="width:53%"></div>
+            </div>
+            <p class="text-[10px] mt-1 mono" style="color:var(--text2)">sourcetype=WinEventLog · 53% actifs</p>
+        </div>
+        <div class="card p-4 rounded-xl shadow-sm ic">
+            <p class="text-xs font-medium uppercase" style="color:var(--text2)">Non Protégés</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-3xl font-bold text-red-600" id="kpi-unp">0</span>
+                <span class="text-xs text-red-500 font-bold">ACTION REQUISE</span>
+            </div>
+            <p class="text-[10px] mt-2 font-medium text-red-500">2 postes à régulariser</p>
+        </div>
+    </div>
+
+    <!-- MTTD / MTTR / INCIDENTS -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 ae d2">
+        <div class="card p-5 rounded-xl shadow-sm ic">
+            <p class="text-xs font-bold uppercase text-blue-600 mb-2">MTTD · Mean Time to Detect</p>
+            <div class="flex items-center gap-3">
+                <div class="gw">
+                    <svg viewBox="0 0 120 70" width="120" height="70">
+                        <path class="gbg" d="M10,65 A55,55 0 0,1 110,65"/>
+                        <path class="gf" stroke="#3b82f6" stroke-dasharray="173" style="stroke-dashoffset:60" d="M10,65 A55,55 0 0,1 110,65"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-blue-600">4.2 <span class="text-sm font-normal">min</span></p>
+                    <p class="text-[10px]" style="color:var(--text2)">Baseline: 8 min</p>
+                    <p class="text-[10px] font-bold text-green-600">-47% vs M-1</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5 rounded-xl shadow-sm ic">
+            <p class="text-xs font-bold uppercase text-purple-600 mb-2">MTTR · Mean Time to Respond</p>
+            <div class="flex items-center gap-3">
+                <div class="gw">
+                    <svg viewBox="0 0 120 70" width="120" height="70">
+                        <path class="gbg" d="M10,65 A55,55 0 0,1 110,65"/>
+                        <path class="gf" stroke="#9333ea" stroke-dasharray="173" style="stroke-dashoffset:40" d="M10,65 A55,55 0 0,1 110,65"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-purple-600">12.7 <span class="text-sm font-normal">min</span></p>
+                    <p class="text-[10px]" style="color:var(--text2)">Baseline: 22 min</p>
+                    <p class="text-[10px] font-bold text-green-600">-42% vs M-1</p>
+                </div>
+            </div>
+        </div>
+        <div class="card p-5 rounded-xl shadow-sm ic">
+            <p class="text-xs font-bold uppercase text-orange-600 mb-2">Notable Events (Splunk ES)</p>
+            <div class="grid grid-cols-2 gap-2 mt-1">
+                <div class="text-center p-2 bg-red-50 rounded"><p class="text-xl font-bold text-red-600">3</p><p class="text-[9px] text-red-500">Critiques</p></div>
+                <div class="text-center p-2 bg-orange-50 rounded"><p class="text-xl font-bold text-orange-600">11</p><p class="text-[9px] text-orange-500">Élevés</p></div>
+                <div class="text-center p-2 bg-yellow-50 rounded"><p class="text-xl font-bold text-yellow-600">28</p><p class="text-[9px] text-yellow-600">Médiums</p></div>
+                <div class="text-center p-2 bg-green-50 rounded"><p class="text-xl font-bold text-green-600">100%</p><p class="text-[9px] text-green-600">Contenus</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SPLUNK SEARCH PERFORMANCE -->
+    <section class="card p-6 rounded-xl shadow-sm ae d2">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="text-lg font-bold flex items-center gap-2" style="color:var(--text)">
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Top Correlation Searches (Splunk ES)
+                </h3>
+                <p class="text-xs" style="color:var(--text2)">Searches générant le plus de notable events ce mois</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-[10px] font-bold mono">48 correlation searches actives</span>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border)">
+                        <th class="text-left pb-2 font-semibold text-blue-600">Correlation Search</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Framework</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Notable</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Risk Score</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Tendance</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 mono font-medium" style="color:var(--text)">Suspicious MSI Execution w/ C2 Beacon</td>
+                        <td class="py-2"><span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px]">Endpoint + Network</span></td>
+                        <td class="py-2 font-bold text-red-600">7</td>
+                        <td class="py-2"><span class="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">80</span></td>
+                        <td class="py-2 text-red-600 font-bold mono">+140%</td>
+                        <td class="py-2"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">TUNED</span></td>
+                    </tr>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 mono font-medium" style="color:var(--text)">User Activity Spike (Z-score &gt; 3)</td>
+                        <td class="py-2"><span class="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px]">UEBA</span></td>
+                        <td class="py-2 font-bold text-orange-600">12</td>
+                        <td class="py-2"><span class="bg-orange-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">60</span></td>
+                        <td class="py-2 text-orange-600 font-bold mono">+88%</td>
+                        <td class="py-2"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">ACTIVE</span></td>
+                    </tr>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 mono font-medium" style="color:var(--text)">Failed Logon Burst (5+ in 1min)</td>
+                        <td class="py-2"><span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px]">Access</span></td>
+                        <td class="py-2 font-bold" style="color:var(--text)">8</td>
+                        <td class="py-2"><span class="bg-yellow-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">40</span></td>
+                        <td class="py-2 text-green-600 font-bold mono">-22%</td>
+                        <td class="py-2"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">ACTIVE</span></td>
+                    </tr>
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-2 mono font-medium" style="color:var(--text)">PowerShell Encoded Command</td>
+                        <td class="py-2"><span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[10px]">Endpoint</span></td>
+                        <td class="py-2 font-bold" style="color:var(--text)">5</td>
+                        <td class="py-2"><span class="bg-orange-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">65</span></td>
+                        <td class="py-2 text-slate-500 font-bold mono">stable</td>
+                        <td class="py-2"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">ACTIVE</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- CHARTS -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 ae d3">
+        <div class="space-y-8">
+            <section class="card p-6 rounded-xl shadow-sm ic">
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold" style="color:var(--text)">Top 10 Utilisateurs (30 jours)</h3>
+                    <p class="text-xs" style="color:var(--text2)">Générateurs d'alertes · identifiants anonymisés</p>
+                </div>
+                <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r text-xs text-red-800 flex gap-2">
+                    <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <div><b>Volume anormal :</b> <code class="bg-red-100 px-1 rounded">user_J</code> · 560 alertes · Investigation ouverte.</div>
+                </div>
+                <div class="cc"><canvas id="userChart"></canvas></div>
+            </section>
+            <section class="card p-6 rounded-xl shadow-sm ic">
+                <div class="mb-4 flex items-start justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold" style="color:var(--text)">Heatmap Alertes · Heures / Jours</h3>
+                        <p class="text-xs" style="color:var(--text2)">Distribution temporelle sur 4 semaines · Survolez pour détails</p>
+                    </div>
+                    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-[10px] font-bold self-start">Pic : Mar 14h</span>
+                </div>
+                <div id="heatmapGrid" class="overflow-x-auto"></div>
+                <div class="flex items-center gap-2 mt-3 justify-end">
+                    <span class="text-[10px]" style="color:var(--text2)">Faible</span>
+                    <div class="flex gap-0.5">
+                        <div class="w-3 h-3 rounded-sm" style="background:#eff6ff"></div>
+                        <div class="w-3 h-3 rounded-sm" style="background:#bfdbfe"></div>
+                        <div class="w-3 h-3 rounded-sm" style="background:#60a5fa"></div>
+                        <div class="w-3 h-3 rounded-sm" style="background:#2563eb"></div>
+                        <div class="w-3 h-3 rounded-sm" style="background:#1e3a8a"></div>
+                    </div>
+                    <span class="text-[10px]" style="color:var(--text2)">Élevé</span>
+                </div>
+            </section>
+        </div>
+
+        <div class="space-y-8">
+            <section class="card p-6 rounded-xl shadow-sm ic">
+                <div class="mb-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold" style="color:var(--text)">MITRE ATT&CK TTPs</h3>
+                        <p class="text-xs" style="color:var(--text2)">Cliquez pour ouvrir la documentation officielle</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-[10px] font-bold">IMPACT -53%</span>
+                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-[10px] font-bold">2260 total</span>
+                    </div>
+                </div>
+                <div class="bg-green-50 border-l-4 border-green-500 p-3 mb-4 rounded-r text-xs text-green-800 flex gap-2">
+                    <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    <div><b>Évolution :</b> Chute <b>Impact (-53%)</b> et <b>Execution (-36%)</b>. Émergence <b>C2 (670)</b> à surveiller.</div>
+                </div>
+                <div id="mitreChart" class="cc border rounded cursor-pointer" style="border-color:var(--border);background:var(--bg3)"></div>
+            </section>
+            <section class="card p-6 rounded-xl shadow-sm ic">
+                <h3 class="text-lg font-bold mb-4" style="color:var(--text)">Statut Parc · 2 250 terminaux</h3>
+                <div class="cc"><canvas id="activityChart"></canvas></div>
+                <div class="mt-4 grid grid-cols-4 gap-2 text-center">
+                    <div class="p-1.5 rounded bg-blue-50"><span class="block text-sm font-bold text-blue-700">1 200</span><span class="text-[9px] text-blue-600">Actifs</span></div>
+                    <div class="p-1.5 rounded" style="background:var(--bg3)"><span class="block text-sm font-bold" style="color:var(--text)">260</span><span class="text-[9px]" style="color:var(--text2)">Inact.&lt;2m</span></div>
+                    <div class="p-1.5 rounded" style="background:var(--bg3)"><span class="block text-sm font-bold" style="color:var(--text)">788</span><span class="text-[9px]" style="color:var(--text2)">Inact.&gt;2m</span></div>
+                    <div class="p-1.5 rounded bg-red-50"><span class="block text-sm font-bold text-red-700">2</span><span class="text-[9px] text-red-600">Non Prot.</span></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- THREAT INTEL IOCs -->
+    <section class="card p-6 rounded-xl shadow-sm ae d4">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="text-lg font-bold" style="color:var(--text)">Threat Intelligence · IOCs (feed Splunk KV Store)</h3>
+                <p class="text-xs" style="color:var(--text2)">IOCs enrichis via <code class="mono bg-slate-100 px-1 rounded text-[10px]">| lookup threat_intel_iocs</code> · Données fictives</p>
+            </div>
+            <span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
+                <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span></span>
+                7 IOCs actifs
+            </span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border)">
+                        <th class="text-left pb-2 font-semibold text-blue-600">Type</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Indicateur</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Catégorie</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Score</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Statut</th>
+                        <th class="text-left pb-2 font-semibold text-blue-600">Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 font-bold mono text-purple-500">IP</td><td class="py-2 mono" style="color:var(--text)">198.51.100.47</td>
+                        <td class="py-2"><span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px]">C2 Server</span></td>
+                        <td class="py-2 font-bold text-red-600">95/100</td>
+                        <td class="py-2"><span class="bg-red-500 text-white px-2 py-0.5 rounded text-[10px]">BLOQUÉ</span></td>
+                        <td class="py-2 mono" style="color:var(--text2)">Splunk + VT API</td>
+                    </tr>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 font-bold mono text-orange-500">Hash</td><td class="py-2 mono" style="color:var(--text)">a3f8b2c1...9f02</td>
+                        <td class="py-2"><span class="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[10px]">Trojan Dropper</span></td>
+                        <td class="py-2 font-bold text-orange-600">88/100</td>
+                        <td class="py-2"><span class="bg-red-500 text-white px-2 py-0.5 rounded text-[10px]">ÉRADIQUÉ</span></td>
+                        <td class="py-2 mono" style="color:var(--text2)">Splunk + Sophos TA</td>
+                    </tr>
+                    <tr class="border-b hover:bg-slate-50 transition-colors" style="border-color:var(--border)">
+                        <td class="py-2 font-bold mono text-blue-500">Domain</td><td class="py-2 mono" style="color:var(--text)">update-svc-cdn[.]ru</td>
+                        <td class="py-2"><span class="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded text-[10px]">Phishing</span></td>
+                        <td class="py-2 font-bold text-yellow-600">72/100</td>
+                        <td class="py-2"><span class="bg-yellow-400 text-white px-2 py-0.5 rounded text-[10px]">SURVEILLÉ</span></td>
+                        <td class="py-2 mono" style="color:var(--text2)">MISP feed</td>
+                    </tr>
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="py-2 font-bold mono text-green-500">URL</td><td class="py-2 mono" style="color:var(--text)">203.0.113.88/payload.ps1</td>
+                        <td class="py-2"><span class="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px]">PS1 Loader</span></td>
+                        <td class="py-2 font-bold text-red-600">91/100</td>
+                        <td class="py-2"><span class="bg-red-500 text-white px-2 py-0.5 rounded text-[10px]">BLOQUÉ</span></td>
+                        <td class="py-2 mono" style="color:var(--text2)">Proxy TA + Splunk</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- INCIDENT KILL CHAIN + SIGMA -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 ae d4">
+        <section class="bg-slate-800 text-white p-6 rounded-xl shadow-lg border border-slate-700">
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <span class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase mono">Notable Event · urgency=high</span>
+                    <h3 class="text-lg font-bold mt-2 text-red-400">Troj/EvilAI-H</h3>
+                    <p class="text-slate-300 text-sm mt-1">Host : <code class="bg-slate-900 px-1.5 rounded">WS-DEMO-7A2B1F</code> · IP : 192.0.2.27</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Utilisateur : user_V (anonymisé)</p>
+                </div>
+                <div class="flex items-center justify-center w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40"><svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
+            </div>
+            <p class="text-[11px] font-bold text-slate-400 uppercase mb-4">Kill Chain Timeline</p>
+            <div class="flex items-start justify-between relative mb-6">
+                <div class="absolute top-5 left-0 right-0 h-0.5 bg-gradient-to-r from-slate-500 via-blue-500 to-green-500"></div>
+                <div class="flex flex-col items-center gap-1 z-10 w-1/5 text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 border-slate-400 bg-slate-700 shadow-md">
+                        <svg class="w-4 h-4 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1 mono">11:48</p><p class="text-[9px] font-bold">Téléchargement</p>
+                </div>
+                <div class="flex flex-col items-center gap-1 z-10 w-1/5 text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 border-orange-400 bg-orange-900/80 shadow-md">
+                        <svg class="w-4 h-4 text-orange-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1 mono">11:51</p><p class="text-[9px] font-bold">Exécution</p>
+                </div>
+                <div class="flex flex-col items-center gap-1 z-10 w-1/5 text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 border-red-400 bg-red-900/80 shadow-md">
+                        <svg class="w-4 h-4 text-red-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1 mono">11:51</p><p class="text-[9px] font-bold">Beacon C2</p>
+                </div>
+                <div class="flex flex-col items-center gap-1 z-10 w-1/5 text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 border-yellow-400 bg-yellow-900/80 shadow-md">
+                        <svg class="w-4 h-4 text-yellow-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1 mono">11:53</p><p class="text-[9px] font-bold">Détection</p>
+                </div>
+                <div class="flex flex-col items-center gap-1 z-10 w-1/5 text-center">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center border-2 border-green-400 bg-green-900/80 shadow-md">
+                        <svg class="w-4 h-4 text-green-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    </div>
+                    <p class="text-[9px] text-slate-400 mt-1 mono">11:57</p><p class="text-[9px] font-bold">Éradiqué</p>
+                </div>
+            </div>
+            <div class="bg-red-900/40 p-3 rounded border border-red-700/50 text-[11px] leading-relaxed text-slate-300">
+                <p class="mb-2"><b class="text-white">Analyse (ES notable event #N-2026-0347) :</b> Corrélation SPL entre <code class="mono text-blue-300">EventCode=1 (Sysmon)</code> sur exécution <code class="mono text-red-300">msiexec.exe</code> non signé et <code class="mono text-blue-300">EventCode=3</code> connexion sortante vers IP externe dans un <code class="mono text-yellow-300">timeframe 2min</code>. Investigation drill-down Splunk : identification du hash via <code class="mono">| lookup sophos_ioc_feed</code>. Incident contenu en 4 min · <span class="text-green-300 font-bold">MTTD: 2 min · MTTR: 4 min</span>.</p>
+            </div>
+        </section>
+
+        <section class="card p-6 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-lg font-bold flex items-center gap-2" style="color:var(--text)">
+                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        Correlation Search SPL
+                    </h3>
+                    <p class="text-xs" style="color:var(--text2)">Déployée dans Splunk ES · Notable event auto-créé · CIM-compliant</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">ACTIVE</span>
+                    <span class="bg-red-500 text-white px-2 py-1 rounded text-[10px] font-bold mono">risk=80</span>
+                </div>
+            </div>
+            <div class="sigma overflow-x-auto">
+<pre class="text-[11px] leading-relaxed mono"><span class="sc">/* Correlation Search: Suspicious MSI Execution with C2 Beacon */</span>
+<span class="sc">/* Author: Axel Sellami · CMA PACA SOC · Date: 2026/02/26   */</span>
+<span class="sc">/* MITRE: T1204.002 (Malicious File) · TA0011 (C2)           */</span>
+
+<span class="sv">index=</span><span class="ss">wineventlog</span> <span class="sv">sourcetype=</span><span class="ss">"XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"</span>
+    EventCode=<span class="sk">1</span> Image=<span class="ss">"*\msiexec.exe"</span> <span class="st">Signed</span>=<span class="sk">false</span>
+    (CommandLine=<span class="ss">"*/i*"</span> CommandLine=<span class="ss">"*.msi*"</span>)
+<span class="st">| rename</span> ProcessGuid <span class="st">as</span> src_guid, Image <span class="st">as</span> process
+<span class="st">| join</span> type=inner src_guid max=<span class="sk">0</span> [
+    <span class="st">search</span> <span class="sv">index=</span><span class="ss">wineventlog</span> <span class="sv">sourcetype=</span><span class="ss">"*Sysmon*"</span>
+        EventCode=<span class="sk">3</span> Initiated=<span class="ss">"true"</span>
+        <span class="st">NOT</span> (DestinationIp=<span class="ss">"10.0.0.0/8"</span> <span class="st">OR</span> DestinationIp=<span class="ss">"192.168.0.0/16"</span>
+             <span class="st">OR</span> DestinationIp=<span class="ss">"172.16.0.0/12"</span>)
+    <span class="st">| rename</span> ProcessGuid <span class="st">as</span> src_guid
+    <span class="st">| eval</span> net_time=_time
+]
+<span class="st">| eval</span> delta=<span class="sk">abs</span>(net_time - _time)
+<span class="st">| where</span> delta &lt;= <span class="sk">120</span>   <span class="sc">/* 2 min timeframe */</span>
+<span class="st">| lookup</span> <span class="sv">sophos_ioc_feed</span> DestinationIp <span class="st">OUTPUT</span> threat_category, risk
+<span class="st">| stats</span> count, <span class="sk">values</span>(DestinationIp) <span class="st">as</span> dest_ips, <span class="sk">values</span>(process) <span class="st">as</span> processes
+    <span class="st">by</span> host, user, Computer
+<span class="st">| eval</span> urgency=<span class="ss">"high"</span>, risk_score=<span class="sk">80</span>
+<span class="st">| where</span> count &gt;= <span class="sk">1</span>
+<span class="st">| collect</span> <span class="sv">index=</span><span class="ss">notable</span></pre>
+            </div>
+            <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div class="p-2 rounded" style="background:var(--bg3)">
+                    <p class="text-[9px] uppercase font-bold" style="color:var(--text2)">Cron</p>
+                    <p class="text-[11px] font-bold mono" style="color:var(--text)">*/5 * * * *</p>
+                </div>
+                <div class="p-2 rounded" style="background:var(--bg3)">
+                    <p class="text-[9px] uppercase font-bold" style="color:var(--text2)">Earliest</p>
+                    <p class="text-[11px] font-bold mono" style="color:var(--text)">-5m@m</p>
+                </div>
+                <div class="p-2 rounded" style="background:var(--bg3)">
+                    <p class="text-[9px] uppercase font-bold" style="color:var(--text2)">Throttle</p>
+                    <p class="text-[11px] font-bold mono" style="color:var(--text)">15min / host</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ANNEXE -->
+    <section class="p-6 rounded-lg ae d5" style="background:var(--bg3);border-top:2px solid var(--border)">
+        <h3 class="text-md font-bold mb-4 flex items-center gap-2" style="color:var(--text2)">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Annexe · Supervision Infrastructure (Netwrix Auditor)
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card p-4 rounded border" style="border-color:var(--border)">
+                <div class="flex gap-3">
+                    <span class="block w-2 h-2 bg-red-500 rounded-full animate-pulse mt-1 flex-shrink-0"></span>
+                    <div>
+                        <h4 class="text-sm font-bold" style="color:var(--text)">Alerte Capacité SGBD</h4>
+                        <p class="text-xs mt-1" style="color:var(--text)">Base <b>AUDIT LOGON</b> · limite hard-coded <b>10 GB</b> atteinte (SQL Express). 1 730 erreurs d'écriture/24h.</p>
+                        <div class="mt-2 w-full rounded-full h-1.5" style="background:var(--border)">
+                            <div class="bg-red-500 h-1.5 rounded-full" style="width:100%"></div>
+                        </div>
+                        <p class="text-[10px] text-right text-red-600 mt-0.5 mono">Usage: 100%</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4 rounded border" style="border-color:var(--border)">
+                <h4 class="text-sm font-bold mb-2" style="color:var(--text)">Impact Opérationnel</h4>
+                <ul class="space-y-2 text-xs" style="color:var(--text)">
+                    <li class="flex justify-between"><span>Licences AD</span><span class="text-red-600 font-bold">Non-conforme</span></li>
+                    <li class="flex justify-between"><span>Collecte Fichiers (files-A/B/C)</span><span class="text-red-600 font-bold">Arrêtée</span></li>
+                </ul>
+                <div class="mt-3 pt-3 border-t" style="border-color:var(--border)">
+                    <span class="text-[10px] font-bold uppercase" style="color:var(--text2)">Action Requise</span>
+                    <p class="text-xs text-blue-600 font-medium">Purge SQL ou Upgrade vers Standard.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="border-t pt-6 pb-4 text-center text-xs space-y-1 ae d6" style="border-color:var(--border);color:var(--text2)">
+        <p>Conçu par <a href="https://github.com/LordMonstey" class="text-blue-500 hover:underline" target="_blank">Axel Sellami</a> · SOC Analyst · Splunk Enterprise Security · <a href="mailto:axelsellami@gmail.com" class="text-blue-500 hover:underline">axelsellami@gmail.com</a></p>
+        <p class="italic opacity-60">Portfolio demo · données fictives · Aucune information opérationnelle réelle</p>
+    </footer>
+</main>
+
+<script>
+function toggleDark(){
+    const h=document.documentElement;
+    h.dataset.theme=h.dataset.theme==='dark'?'light':'dark';
+    localStorage.setItem('theme',h.dataset.theme);
+    initCharts();
+}
+if(localStorage.getItem('theme')==='dark') document.documentElement.dataset.theme='dark';
+
+function animCount(id,target,dur=1200){
+    const el=document.getElementById(id); if(!el)return;
+    let v=0; const step=target/(dur/16);
+    const t=setInterval(()=>{
+        v+=step; if(v>=target){el.textContent=Math.round(target).toLocaleString('fr-FR');clearInterval(t);}
+        else el.textContent=Math.floor(v).toLocaleString('fr-FR');
+    },16);
+}
+
+const days=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const hours=Array.from({length:24},(_,i)=>i);
+// Generate realistic heatmap pattern: high on weekday business hours, peaks at 10h/14h/16h
+// Seeded so it is deterministic (looks professional, not random on each reload)
+function seededRand(seed){let x=Math.sin(seed)*10000;return x-Math.floor(x);}
+const heatZ=days.map((_,di)=>hours.map(h=>{
+    let base;
+    if(di<5){ // weekday
+        if(h>=8&&h<=18) base=45+seededRand(di*100+h)*45;
+        else if(h>=6&&h<=7||h>=19&&h<=22) base=15+seededRand(di*100+h)*20;
+        else base=2+seededRand(di*100+h)*8;
+    } else { // weekend
+        base=3+seededRand(di*100+h)*10;
+    }
+    // Peak hours
+    if(di<5){
+        if(h===10) base+=25+seededRand(di*200)*15;
+        if(h===14) base+=35+seededRand(di*300)*20;
+        if(h===16) base+=20+seededRand(di*400)*15;
+    }
+    return Math.round(base);
+}));
+const heatMax=Math.max(...heatZ.flat());
+function heatColor(v){
+    const r=v/heatMax;
+    if(r<0.15) return '#eff6ff';
+    if(r<0.35) return '#bfdbfe';
+    if(r<0.55) return '#60a5fa';
+    if(r<0.78) return '#2563eb';
+    return '#1e3a8a';
+}
+function renderHeatmap(){
+    const container=document.getElementById('heatmapGrid');
+    if(!container) return;
+    const isDarkMode=document.documentElement.dataset.theme==='dark';
+    const labelColor=isDarkMode?'#94a3b8':'#64748b';
+    let html='<div class="inline-block min-w-full"><div class="flex items-end mb-1" style="padding-left:38px">';
+    // Hour labels (show every 3 hours)
+    hours.forEach(h=>{
+        const show=(h%3===0);
+        html+=`<div style="width:calc((100% - 0px)/24);min-width:18px" class="text-[9px] text-center mono" ${show?'':'style="visibility:hidden"'}>${show?h.toString().padStart(2,'0')+'h':''}</div>`;
+    });
+    html+='</div>';
+    // Rows
+    days.forEach((d,di)=>{
+        html+='<div class="flex items-center mb-0.5">';
+        html+=`<div class="text-[10px] font-bold mono pr-2" style="width:38px;color:${labelColor}">${d}</div>`;
+        html+='<div class="flex gap-0.5 flex-1">';
+        heatZ[di].forEach((v,hi)=>{
+            html+=`<div class="rounded-sm cursor-pointer transition-transform hover:scale-150 hover:z-10 relative" style="flex:1;min-width:16px;aspect-ratio:1;background:${heatColor(v)}" title="${d} ${hi.toString().padStart(2,'0')}h00 · ${v} alertes"></div>`;
+        });
+        html+='</div></div>';
+    });
+    html+='</div>';
+    container.innerHTML=html;
+}
+
+const userData={
+    labels:['user_J','user_N','user_V','user_M','svc_db','user_W','user_S','user_A','user_P','user_T'],
+    data:[560,195,80,70,70,68,65,58,50,48]
+};
+const actD={labels:['Actifs','Inact.<2m','Inact.>2m','Non Prot.'],data:[1200,260,788,2],colors:['#3b82f6','#cbd5e1','#94a3b8','#ef4444']};
+const mitre=[
+    {l:"Impact (TA0040)",v:2260,p:"T",d:"Destruction/manipulation<br><b>Évolution:</b> -53%",u:"https://attack.mitre.org/tactics/TA0040/"},
+    {l:"Execution (TA0002)",v:885,p:"T",d:"Exécution code malveillant<br><b>Évolution:</b> -36%",u:"https://attack.mitre.org/tactics/TA0002/"},
+    {l:"Defense Evasion (TA0005)",v:810,p:"T",d:"Contournement défenses<br><b>Évolution:</b> stable",u:"https://attack.mitre.org/tactics/TA0005/"},
+    {l:"C2 (TA0011)",v:670,p:"T",d:"Communications suspectes<br><b>Évolution:</b> Nouvelle entrée",u:"https://attack.mitre.org/tactics/TA0011/"},
+    {l:"Persistence (TA0003)",v:495,p:"T",d:"Maintien de l'accès<br><b>Évolution:</b> -5%",u:"https://attack.mitre.org/tactics/TA0003/"},
+    {l:"Credential Access (TA0006)",v:160,p:"T",d:"Vol d'identifiants<br><b>Évolution:</b> Nouvelle entrée",u:"https://attack.mitre.org/tactics/TA0006/"}
+];
+
+let uCh=null,aCh=null;
+function isDk(){return document.documentElement.dataset.theme==='dark';}
+
+function initCharts(){
+    const tc=isDk()?'#94a3b8':'#64748b';
+    const gc=isDk()?'#1e293b':'#f1f5f9';
+    if(uCh)uCh.destroy();
+    uCh=new Chart(document.getElementById('userChart').getContext('2d'),{
+        type:'bar',
+        data:{labels:userData.labels,datasets:[{label:'Détections',data:userData.data,backgroundColor:c=>c.dataIndex===0?'#dc2626':'#1e40af',borderRadius:4}]},
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:gc},ticks:{color:tc}},y:{grid:{display:false},ticks:{color:tc,font:{size:10}}}},plugins:{legend:{display:false}}}
+    });
+    if(aCh)aCh.destroy();
+    aCh=new Chart(document.getElementById('activityChart').getContext('2d'),{
+        type:'doughnut',
+        data:{labels:actD.labels,datasets:[{data:actD.data,backgroundColor:actD.colors,borderWidth:0,hoverOffset:10}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},color:tc}}},cutout:'65%'}
+    });
+    Plotly.newPlot('mitreChart',[{
+        type:"treemap",labels:mitre.map(d=>d.l),parents:mitre.map(d=>d.p),values:mitre.map(d=>d.v),
+        text:mitre.map(d=>d.d),customdata:mitre.map(d=>d.u),
+        hovertemplate:"<b>%{label}</b><br>Volume: %{value}<br><br>%{text}<br><span style='color:#3b82f6;font-weight:bold;'>Cliquez pour MITRE</span><extra></extra>",
+        textinfo:"label+value",
+        marker:{colors:["#bfdbfe","#93c5fd","#60a5fa","#3b82f6","#2563eb","#1d4ed8"],line:{color:isDk()?'#0f172a':'#f8fafc',width:1}}
+    }],{margin:{t:0,l:0,r:0,b:0},font:{family:'Outfit',color:tc},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)'},
+    {responsive:true,displayModeBar:false});
+    document.getElementById('mitreChart').on('plotly_click',d=>{
+        if(d.points?.[0]?.customdata)window.open(d.points[0].customdata,'_blank','noopener');
+    });
+    renderHeatmap();
+}
+
+async function generatePDF(){
+    const btn=document.getElementById('btnText'),loader=document.getElementById('loaderIcon');
+    btn.textContent='Génération...';loader.classList.remove('hidden');
+    await new Promise(r=>setTimeout(r,500));
+    await html2pdf().set({
+        margin:[10,10,10,10],filename:'Dashboard_RSSI_Portfolio_Demo.pdf',
+        image:{type:'jpeg',quality:.98},
+        html2canvas:{scale:2,useCORS:true,scrollY:0},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(document.getElementById('dashboardContent')).save();
+    btn.textContent='Télécharger PDF';loader.classList.add('hidden');
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+    animCount('kpi-det',2150);animCount('kpi-hlth',100);
+    animCount('kpi-act',1200);animCount('kpi-unp',2);
+    initCharts();
+});
+</script>
+</body>
+</html>
