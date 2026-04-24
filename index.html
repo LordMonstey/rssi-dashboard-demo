@@ -74,7 +74,7 @@
         .pdf-exporting *{animation:none !important;transition:none !important}
         .pdf-exporting .ae{opacity:1 !important;transform:none !important}
         .pdf-exporting header{background:#ffffff !important;backdrop-filter:none !important}
-        .pdf-exporting body{background:#f8fafc !important}
+        .pdf-exporting body{background:#ffffff !important}
         .pdf-exporting .no-print{display:none !important}
     </style>
 </head>
@@ -523,7 +523,7 @@
             <div class="sigma overflow-x-auto">
 <pre class="text-[11px] leading-relaxed mono"><span class="sc">/* Correlation Search: Suspicious MSI Execution with C2 Beacon */</span>
 <span class="sc">/* Author: A.S · CMA PACA SOC · Date: 2026/02/26   */</span>
-<span class="sc">/* MITRE: T1204.002 (Malicious File) · TA0011 (C2)           */</span>
+<span class="sc">/* MITRE: T1204.002 (Malicious File) · TA0011 (C2)            */</span>
 
 <span class="sv">index=</span><span class="ss">wineventlog</span> <span class="sv">sourcetype=</span><span class="ss">"XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"</span>
     EventCode=<span class="sk">1</span> Image=<span class="ss">"*\msiexec.exe"</span> <span class="st">Signed</span>=<span class="sk">false</span>
@@ -730,6 +730,9 @@ async function generatePDF(){
     let plotlyImg=null;
     const mitreDiv=document.getElementById('mitreChart');
 
+    const originalScrollY = window.scrollY;
+    window.scrollTo(0, 0);
+
     try {
         if(wasDark){
             document.documentElement.dataset.theme='light';
@@ -779,12 +782,6 @@ async function generatePDF(){
             allowTaint:true,
             backgroundColor:'#ffffff',
             logging:false,
-            scrollX:0,
-            scrollY:-window.scrollY,
-            windowWidth:dashboard.scrollWidth,
-            windowHeight:dashboard.scrollHeight,
-            width:dashboard.scrollWidth,
-            height:dashboard.scrollHeight,
             onclone:(clonedDoc)=>{
                 clonedDoc.documentElement.dataset.theme='light';
                 clonedDoc.body.classList.add('pdf-exporting');
@@ -805,19 +802,30 @@ async function generatePDF(){
         const pdfH=pdf.internal.pageSize.getHeight();
         const margin=8;
         const usableW=pdfW-margin*2;
-        const imgH=canvas.height * usableW / canvas.width;
+        const pageH=pdfH-margin*2;
+        
+        const ratio=usableW/canvas.width;
+        const imgH=canvas.height*ratio;
 
         let heightLeft=imgH;
         let position=margin;
+        let pageCount=1;
 
         pdf.addImage(imgData,'JPEG',margin,position,usableW,imgH,undefined,'FAST');
-        heightLeft-=(pdfH-margin*2);
+        heightLeft-=pageH;
+        
+        pdf.setFontSize(9);
+        pdf.setTextColor(150);
+        pdf.text('Page '+pageCount, pdfW/2, pdfH-4, {align: 'center'});
 
         while(heightLeft>0){
+            position-=pageH;
             pdf.addPage();
-            position=margin-(imgH-heightLeft);
             pdf.addImage(imgData,'JPEG',margin,position,usableW,imgH,undefined,'FAST');
-            heightLeft-=(pdfH-margin*2);
+            heightLeft-=pageH;
+            
+            pageCount++;
+            pdf.text('Page '+pageCount, pdfW/2, pdfH-4, {align: 'center'});
         }
 
         pdf.save('Dashboard_RSSI_Portfolio_Demo.pdf');
@@ -833,6 +841,9 @@ async function generatePDF(){
         if(plotlyImg && plotlyImg.parentNode) plotlyImg.parentNode.removeChild(plotlyImg);
         if(mitreDiv) mitreDiv.style.display='';
         document.body.classList.remove('pdf-exporting');
+        
+        window.scrollTo(0, originalScrollY);
+
         if(wasDark){
             document.documentElement.dataset.theme='dark';
             initCharts();
