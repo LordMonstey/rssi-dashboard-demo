@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard RSSI · Splunk ES Portfolio Demo | CMAR PACA</title>
     <meta name="description" content="Portfolio dashboard · reporting RSSI mensuel par A.S, SOC Analyst. Données anonymisées .">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -70,10 +71,10 @@
         ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
         [data-theme="dark"] ::-webkit-scrollbar-thumb{background:#475569}
 
-        .pdf-exporting .ae{opacity:1 !important;animation:none !important;transform:none !important}
         .pdf-exporting *{animation:none !important;transition:none !important}
+        .pdf-exporting .ae{opacity:1 !important;transform:none !important}
         .pdf-exporting header{background:#ffffff !important;backdrop-filter:none !important}
-        .pdf-exporting body{background:#f8fafc !important;animation:none !important}
+        .pdf-exporting body{background:#f8fafc !important}
         .pdf-exporting .no-print{display:none !important}
     </style>
 </head>
@@ -520,7 +521,9 @@
                 </div>
             </div>
             <div class="sigma overflow-x-auto">
-<pre class="text-[11px] leading-relaxed mono">
+<pre class="text-[11px] leading-relaxed mono"><span class="sc">/* Correlation Search: Suspicious MSI Execution with C2 Beacon */</span>
+<span class="sc">/* Author: A.S · CMA PACA SOC · Date: 2026/02/26   */</span>
+<span class="sc">/* MITRE: T1204.002 (Malicious File) · TA0011 (C2)           */</span>
 
 <span class="sv">index=</span><span class="ss">wineventlog</span> <span class="sv">sourcetype=</span><span class="ss">"XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"</span>
     EventCode=<span class="sk">1</span> Image=<span class="ss">"*\msiexec.exe"</span> <span class="st">Signed</span>=<span class="sk">false</span>
@@ -535,7 +538,7 @@
     <span class="st">| eval</span> net_time=_time
 ]
 <span class="st">| eval</span> delta=<span class="sk">abs</span>(net_time - _time)
-<span class="st">| where</span> delta &lt;= <span class="sk">120</span>
+<span class="st">| where</span> delta &lt;= <span class="sk">120</span>   <span class="sc">/* 2 min timeframe */</span>
 <span class="st">| lookup</span> <span class="sv">sophos_ioc_feed</span> DestinationIp <span class="st">OUTPUT</span> threat_category, risk
 <span class="st">| stats</span> count, <span class="sk">values</span>(DestinationIp) <span class="st">as</span> dest_ips, <span class="sk">values</span>(process) <span class="st">as</span> processes
     <span class="st">by</span> host, user, Computer
@@ -693,13 +696,13 @@ function initCharts(){
     uCh=new Chart(document.getElementById('userChart').getContext('2d'),{
         type:'bar',
         data:{labels:userData.labels,datasets:[{label:'Détections',data:userData.data,backgroundColor:c=>c.dataIndex===0?'#dc2626':'#1e40af',borderRadius:4}]},
-        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:0},scales:{x:{grid:{color:gc},ticks:{color:tc}},y:{grid:{display:false},ticks:{color:tc,font:{size:10}}}},plugins:{legend:{display:false}}}
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:gc},ticks:{color:tc}},y:{grid:{display:false},ticks:{color:tc,font:{size:10}}}},plugins:{legend:{display:false}}}
     });
     if(aCh)aCh.destroy();
     aCh=new Chart(document.getElementById('activityChart').getContext('2d'),{
         type:'doughnut',
         data:{labels:actD.labels,datasets:[{data:actD.data,backgroundColor:actD.colors,borderWidth:0,hoverOffset:10}]},
-        options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},color:tc}}},cutout:'65%'}
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10},color:tc}}},cutout:'65%'}
     });
     Plotly.newPlot('mitreChart',[{
         type:"treemap",labels:mitre.map(d=>d.l),parents:mitre.map(d=>d.p),values:mitre.map(d=>d.v),
@@ -716,100 +719,122 @@ function initCharts(){
 }
 
 async function generatePDF(){
-    const btn=document.getElementById('btnText'),loader=document.getElementById('loaderIcon');
-    btn.textContent='Génération...';loader.classList.remove('hidden');
+    const btn=document.getElementById('btnText');
+    const loader=document.getElementById('loaderIcon');
+    btn.textContent='Génération...';
+    loader.classList.remove('hidden');
 
-    const wasDark = document.documentElement.dataset.theme === 'dark';
-    const dashboard = document.getElementById('dashboardContent');
-
-    const chartCanvases = [];
-    const replacements = [];
+    const wasDark=document.documentElement.dataset.theme==='dark';
+    const dashboard=document.getElementById('dashboardContent');
+    const replacements=[];
+    let plotlyImg=null;
+    const mitreDiv=document.getElementById('mitreChart');
 
     try {
-        if (wasDark) {
-            document.documentElement.dataset.theme = 'light';
+        if(wasDark){
+            document.documentElement.dataset.theme='light';
             initCharts();
-            await new Promise(r=>setTimeout(r,400));
+            await new Promise(r=>setTimeout(r,500));
         }
 
         document.body.classList.add('pdf-exporting');
 
         document.querySelectorAll('#dashboardContent canvas').forEach(canvas=>{
-            const dataUrl = canvas.toDataURL('image/png', 1.0);
-            const img = document.createElement('img');
-            img.src = dataUrl;
-            img.style.width = canvas.style.width || canvas.offsetWidth + 'px';
-            img.style.height = canvas.style.height || canvas.offsetHeight + 'px';
-            img.style.maxWidth = '100%';
-            img.style.display = 'block';
-            canvas.parentNode.insertBefore(img, canvas);
-            canvas.style.display = 'none';
-            replacements.push({original:canvas, replacement:img});
+            const w=canvas.offsetWidth, h=canvas.offsetHeight;
+            const dataUrl=canvas.toDataURL('image/png',1.0);
+            const img=document.createElement('img');
+            img.src=dataUrl;
+            img.style.width=w+'px';
+            img.style.height=h+'px';
+            img.style.maxWidth='100%';
+            img.style.display='block';
+            canvas.parentNode.insertBefore(img,canvas);
+            canvas.style.display='none';
+            replacements.push({canvas,img});
         });
 
-        const mitreDiv = document.getElementById('mitreChart');
-        let plotlyImgEl = null;
-        if (mitreDiv && window.Plotly) {
+        if(mitreDiv && window.Plotly){
             try {
-                const plotImg = await Plotly.toImage(mitreDiv, {
-                    format:'png',
-                    width: mitreDiv.offsetWidth || 600,
-                    height: mitreDiv.offsetHeight || 350,
-                    scale: 2
-                });
-                plotlyImgEl = document.createElement('img');
-                plotlyImgEl.src = plotImg;
-                plotlyImgEl.style.width = '100%';
-                plotlyImgEl.style.height = (mitreDiv.offsetHeight || 350) + 'px';
-                plotlyImgEl.style.display = 'block';
-                plotlyImgEl.style.objectFit = 'contain';
-                mitreDiv.style.display = 'none';
-                mitreDiv.parentNode.insertBefore(plotlyImgEl, mitreDiv);
-            } catch(e){ console.warn('Plotly toImage failed', e); }
+                const w=mitreDiv.offsetWidth||600;
+                const h=mitreDiv.offsetHeight||350;
+                const plotData=await Plotly.toImage(mitreDiv,{format:'png',width:w,height:h,scale:2});
+                plotlyImg=document.createElement('img');
+                plotlyImg.src=plotData;
+                plotlyImg.style.width=w+'px';
+                plotlyImg.style.height=h+'px';
+                plotlyImg.style.display='block';
+                mitreDiv.style.display='none';
+                mitreDiv.parentNode.insertBefore(plotlyImg,mitreDiv);
+            } catch(e){ console.warn('Plotly export skipped:',e); }
         }
 
-        await new Promise(r=>setTimeout(r,300));
-        if (document.fonts && document.fonts.ready) {
+        if(document.fonts && document.fonts.ready){
             try { await document.fonts.ready; } catch(e){}
         }
+        await new Promise(r=>setTimeout(r,400));
 
-        await html2pdf().set({
-            margin:[8,8,8,8],
-            filename:'Dashboard_RSSI_Portfolio_Demo.pdf',
-            image:{type:'jpeg',quality:0.98},
-            html2canvas:{
-                scale:2,
-                useCORS:true,
-                allowTaint:true,
-                backgroundColor:'#ffffff',
-                logging:false,
-                scrollX:0,
-                scrollY:0,
-                windowWidth: dashboard.scrollWidth,
-                windowHeight: dashboard.scrollHeight
-            },
-            jsPDF:{unit:'mm',format:'a4',orientation:'portrait',compress:true},
-            pagebreak:{mode:['avoid-all','css','legacy']}
-        }).from(dashboard).save();
-
-        replacements.forEach(({original,replacement})=>{
-            if (replacement && replacement.parentNode) replacement.parentNode.removeChild(replacement);
-            original.style.display = '';
+        const canvas=await html2canvas(dashboard,{
+            scale:2,
+            useCORS:true,
+            allowTaint:true,
+            backgroundColor:'#ffffff',
+            logging:false,
+            scrollX:0,
+            scrollY:-window.scrollY,
+            windowWidth:dashboard.scrollWidth,
+            windowHeight:dashboard.scrollHeight,
+            width:dashboard.scrollWidth,
+            height:dashboard.scrollHeight,
+            onclone:(clonedDoc)=>{
+                clonedDoc.documentElement.dataset.theme='light';
+                clonedDoc.body.classList.add('pdf-exporting');
+                clonedDoc.querySelectorAll('.no-print').forEach(el=>el.style.display='none');
+            }
         });
-        if (plotlyImgEl && plotlyImgEl.parentNode) plotlyImgEl.parentNode.removeChild(plotlyImgEl);
-        if (mitreDiv) mitreDiv.style.display = '';
+
+        const imgData=canvas.toDataURL('image/jpeg',0.95);
+        const { jsPDF }=window.jspdf;
+        const pdf=new jsPDF({
+            orientation:'portrait',
+            unit:'mm',
+            format:'a4',
+            compress:true
+        });
+
+        const pdfW=pdf.internal.pageSize.getWidth();
+        const pdfH=pdf.internal.pageSize.getHeight();
+        const margin=8;
+        const usableW=pdfW-margin*2;
+        const imgH=canvas.height * usableW / canvas.width;
+
+        let heightLeft=imgH;
+        let position=margin;
+
+        pdf.addImage(imgData,'JPEG',margin,position,usableW,imgH,undefined,'FAST');
+        heightLeft-=(pdfH-margin*2);
+
+        while(heightLeft>0){
+            pdf.addPage();
+            position=margin-(imgH-heightLeft);
+            pdf.addImage(imgData,'JPEG',margin,position,usableW,imgH,undefined,'FAST');
+            heightLeft-=(pdfH-margin*2);
+        }
+
+        pdf.save('Dashboard_RSSI_Portfolio_Demo.pdf');
 
     } catch(err){
-        console.error('Erreur PDF:', err);
-        alert('Erreur lors de la génération du PDF : ' + err.message);
-        replacements.forEach(({original,replacement})=>{
-            try { if (replacement && replacement.parentNode) replacement.parentNode.removeChild(replacement); } catch(e){}
-            original.style.display = '';
-        });
+        console.error('Erreur export PDF:',err);
+        alert('Erreur lors de la génération du PDF : '+err.message+'\n\nOuvrez la console (F12) pour plus de détails.');
     } finally {
+        replacements.forEach(({canvas,img})=>{
+            try { if(img && img.parentNode) img.parentNode.removeChild(img); } catch(e){}
+            canvas.style.display='';
+        });
+        if(plotlyImg && plotlyImg.parentNode) plotlyImg.parentNode.removeChild(plotlyImg);
+        if(mitreDiv) mitreDiv.style.display='';
         document.body.classList.remove('pdf-exporting');
-        if (wasDark) {
-            document.documentElement.dataset.theme = 'dark';
+        if(wasDark){
+            document.documentElement.dataset.theme='dark';
             initCharts();
         }
         btn.textContent='Télécharger PDF';
